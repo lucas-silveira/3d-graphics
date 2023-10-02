@@ -13,6 +13,7 @@ struct vec3d
 struct triangle
 {
     vec3d p[3];
+    sf::Color color;
 };
 
 struct mesh
@@ -27,6 +28,7 @@ struct mat4x4
 
 mesh meshCube;
 mat4x4 matProj;
+vec3d camera;
 
 void multiplyMatrixVec(vec3d &i,vec3d &o, mat4x4 &m)
 {
@@ -41,11 +43,12 @@ void multiplyMatrixVec(vec3d &i,vec3d &o, mat4x4 &m)
     }
 }
 
-void drawTriangle(
+void drawTriangleLine(
         sf::RenderWindow &w,
         int x1, int y1,
         int x2, int y2,
-        int x3, int y3
+        int x3, int y3,
+        sf::Color color = sf::Color::White
     )
 {
     sf::VertexArray v1(sf::Lines, 2);
@@ -61,9 +64,41 @@ void drawTriangle(
     v3[0].position = sf::Vector2f(x3, y3);
     v3[1].position = sf::Vector2f(x1, y1);
 
+    v1[0].color = color;
+    v1[1].color = color;
+    v2[0].color = color;
+    v2[1].color = color;
+    v3[0].color = color;
+    v3[1].color = color;
+
     w.draw(v1);
     w.draw(v2);
     w.draw(v3);
+}
+
+void drawTriangleFilled(
+        sf::RenderWindow &w,
+        int x1, int y1,
+        int x2, int y2,
+        int x3, int y3,
+        sf::Color color
+    )
+{
+    sf::ConvexShape triangle;
+    triangle.setPointCount(6);
+
+    triangle.setPoint(0, sf::Vector2f(x1, y1));
+    triangle.setPoint(1, sf::Vector2f(x2, y2));
+
+    triangle.setPoint(2, sf::Vector2f(x2, y2));
+    triangle.setPoint(3, sf::Vector2f(x3, y3));
+
+    triangle.setPoint(4, sf::Vector2f(x3, y3));
+    triangle.setPoint(5, sf::Vector2f(x1, y1));
+
+    triangle.setFillColor(color);
+
+    w.draw(triangle);
 }
 
 
@@ -94,37 +129,81 @@ void drawCube(sf::RenderWindow &w, sf::Time elapsed)
         multiplyMatrixVec(tri.p[1], triRotatedZ.p[1], matRotZ);
         multiplyMatrixVec(tri.p[2], triRotatedZ.p[2], matRotZ);
 
+        // Rotate in X-Axis
         multiplyMatrixVec(triRotatedZ.p[0], triRotatedZX.p[0], matRotX);
         multiplyMatrixVec(triRotatedZ.p[1], triRotatedZX.p[1], matRotX);
         multiplyMatrixVec(triRotatedZ.p[2], triRotatedZX.p[2], matRotX);
 
+        // Offset into the screen
         triTranslated = triRotatedZX;
         triTranslated.p[0].z = triRotatedZX.p[0].z + 3.0f;
         triTranslated.p[1].z = triRotatedZX.p[1].z + 3.0f;
         triTranslated.p[2].z = triRotatedZX.p[2].z + 3.0f;
 
-        multiplyMatrixVec(triTranslated.p[0], triProjected.p[0], matProj);
-        multiplyMatrixVec(triTranslated.p[1], triProjected.p[1], matProj);
-        multiplyMatrixVec(triTranslated.p[2], triProjected.p[2], matProj);
+        vec3d normal, line1, line2;
+        line1.x = triTranslated.p[1].x - triTranslated.p[0].x;
+        line1.y = triTranslated.p[1].y - triTranslated.p[0].y;
+        line1.z = triTranslated.p[1].z - triTranslated.p[0].z;
 
-        // Scale into view
-        triProjected.p[0].x += 1.0f; triProjected.p[0].y += 1.0f;
-        triProjected.p[1].x += 1.0f; triProjected.p[1].y += 1.0f;
-        triProjected.p[2].x += 1.0f; triProjected.p[2].y += 1.0f;
+        line2.x = triTranslated.p[2].x - triTranslated.p[0].x;
+        line2.y = triTranslated.p[2].y - triTranslated.p[0].y;
+        line2.z = triTranslated.p[2].z - triTranslated.p[0].z;
 
-        triProjected.p[0].x *= 0.5f * (float)SCREEN_WIDTH;
-        triProjected.p[0].y *= 0.5f * (float)SCREEN_HEIGHT;
-        triProjected.p[1].x *= 0.5f * (float)SCREEN_WIDTH;
-        triProjected.p[1].y *= 0.5f * (float)SCREEN_HEIGHT;
-        triProjected.p[2].x *= 0.5f * (float)SCREEN_WIDTH;
-        triProjected.p[2].y *= 0.5f * (float)SCREEN_HEIGHT;
+        normal.x = line1.y*line2.z - line1.z*line2.y;
+        normal.y = line1.z*line2.x - line1.x*line2.z;
+        normal.z = line1.x*line2.y - line1.y*line2.x;
 
-        drawTriangle(
-            w,
-            triProjected.p[0].x, triProjected.p[0].y,
-            triProjected.p[1].x, triProjected.p[1].y,
-            triProjected.p[2].x, triProjected.p[2].y
-        );
+        float l = std::sqrtf(normal.x*normal.x + normal.y*normal.y + normal.z*normal.z);
+        normal.x /= l; normal.y /= l; normal.z /= l;
+
+        if (
+            normal.x * (triTranslated.p[0].x - camera.x) +
+            normal.y * (triTranslated.p[0].y - camera.y) +
+            normal.z * (triTranslated.p[0].z - camera.z) < 0.0f
+        )
+        {
+            // Shading
+            vec3d lightDirection = {0.0f, 0.0f, -1.0f};
+            float l = std::sqrtf(lightDirection.x*lightDirection.x + lightDirection.y*lightDirection.y + lightDirection.z*lightDirection.z);
+            lightDirection.x /= l; lightDirection.y /= l; lightDirection.z /= l;
+
+            float dp = normal.x*lightDirection.x + normal.y*lightDirection.y + normal.z*lightDirection.z;
+            triTranslated.color = {static_cast<sf::Uint8>(255*dp), static_cast<sf::Uint8>(255*dp), static_cast<sf::Uint8>(255*dp)};
+
+            // Project triangles from 3D -> 2D
+            multiplyMatrixVec(triTranslated.p[0], triProjected.p[0], matProj);
+            multiplyMatrixVec(triTranslated.p[1], triProjected.p[1], matProj);
+            multiplyMatrixVec(triTranslated.p[2], triProjected.p[2], matProj);
+            triProjected.color = triTranslated.color;
+
+            // Scale into view
+            triProjected.p[0].x += 1.0f; triProjected.p[0].y += 1.0f;
+            triProjected.p[1].x += 1.0f; triProjected.p[1].y += 1.0f;
+            triProjected.p[2].x += 1.0f; triProjected.p[2].y += 1.0f;
+            triProjected.p[0].x *= 0.5f * (float)SCREEN_WIDTH;
+            triProjected.p[0].y *= 0.5f * (float)SCREEN_HEIGHT;
+            triProjected.p[1].x *= 0.5f * (float)SCREEN_WIDTH;
+            triProjected.p[1].y *= 0.5f * (float)SCREEN_HEIGHT;
+            triProjected.p[2].x *= 0.5f * (float)SCREEN_WIDTH;
+            triProjected.p[2].y *= 0.5f * (float)SCREEN_HEIGHT;
+
+            // Rasterize triangle
+            drawTriangleFilled(
+                w,
+                triProjected.p[0].x, triProjected.p[0].y,
+                triProjected.p[1].x, triProjected.p[1].y,
+                triProjected.p[2].x, triProjected.p[2].y,
+                triProjected.color
+            );
+
+            // drawTriangleLine(
+            //     w,
+            //     triProjected.p[0].x, triProjected.p[0].y,
+            //     triProjected.p[1].x, triProjected.p[1].y,
+            //     triProjected.p[2].x, triProjected.p[2].y,
+            //     sf::Color::Black
+            // );
+        }
     }
 }
 
