@@ -1,4 +1,5 @@
 #include <SFML/Graphics.hpp>
+#include <cmath>
 #include <vector>
 
 const unsigned int SCREEN_WIDTH = 920;
@@ -107,18 +108,18 @@ void drawCube(sf::RenderWindow &w, sf::Time elapsed)
     mat4x4 matRotZ, matRotX;
     theta += 1.0f * elapsed.asSeconds();
 
-    matRotZ.m[0][0] = std::cosf(theta);
-    matRotZ.m[0][1] = std::sinf(theta);
-    matRotZ.m[1][0] = -std::sinf(theta);
-    matRotZ.m[1][1] = std::cosf(theta);
+    matRotZ.m[0][0] = cosf(theta);
+    matRotZ.m[0][1] = sinf(theta);
+    matRotZ.m[1][0] = -sinf(theta);
+    matRotZ.m[1][1] = cosf(theta);
     matRotZ.m[2][2] = 1.0f;
     matRotZ.m[3][3] = 1.0f;
 
     matRotX.m[0][0] = 1.0f;;
-    matRotX.m[1][1] = std::cosf(theta*0.5f);
-    matRotX.m[1][2] = std::sinf(theta*0.5f);
-    matRotX.m[2][1] = -std::sinf(theta*0.5f);
-    matRotX.m[2][2] = std::cosf(theta*0.5f);
+    matRotX.m[1][1] = cosf(theta*0.5f);
+    matRotX.m[1][2] = sinf(theta*0.5f);
+    matRotX.m[2][1] = -sinf(theta*0.5f);
+    matRotX.m[2][2] = cosf(theta*0.5f);
     matRotX.m[3][3] = 1.0f;
 
     for (auto tri : meshCube.tris)
@@ -153,7 +154,7 @@ void drawCube(sf::RenderWindow &w, sf::Time elapsed)
         normal.y = line1.z*line2.x - line1.x*line2.z;
         normal.z = line1.x*line2.y - line1.y*line2.x;
 
-        float l = std::sqrtf(normal.x*normal.x + normal.y*normal.y + normal.z*normal.z);
+        float l = sqrtf(normal.x*normal.x + normal.y*normal.y + normal.z*normal.z);
         normal.x /= l; normal.y /= l; normal.z /= l;
 
         if (
@@ -164,7 +165,7 @@ void drawCube(sf::RenderWindow &w, sf::Time elapsed)
         {
             // Shading
             vec3d lightDirection = {0.0f, 0.0f, -1.0f};
-            float l = std::sqrtf(lightDirection.x*lightDirection.x + lightDirection.y*lightDirection.y + lightDirection.z*lightDirection.z);
+            float l = sqrtf(lightDirection.x*lightDirection.x + lightDirection.y*lightDirection.y + lightDirection.z*lightDirection.z);
             lightDirection.x /= l; lightDirection.y /= l; lightDirection.z /= l;
 
             float dp = normal.x*lightDirection.x + normal.y*lightDirection.y + normal.z*lightDirection.z;
@@ -238,7 +239,7 @@ void init()
     // Projection matrix
     float near = 0.1f, far = 1000.0f, fov = 90.0f;
     float aspectRatio = (float)SCREEN_HEIGHT/(float)SCREEN_WIDTH;
-    float fovRad = 1.0f / std::tanf(fov*0.5f);
+    float fovRad = 1.0f / tanf(fov*0.5f);
 
     matProj.m[0][0] = aspectRatio*fovRad;
     matProj.m[1][1] = fovRad;
