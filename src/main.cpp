@@ -3,6 +3,7 @@
 #include <strstream>
 #include <cmath>
 #include <vector>
+#include <list>
 #include "include/geometry.hpp"
 
 const unsigned int SCREEN_WIDTH = 920;
@@ -116,6 +117,7 @@ void drawObj(sf::RenderWindow &w, sf::Time elapsed)
         normal = crossProduct(line1, line2);
         normal = normVector(normal);
 
+        // Get Ray from triangle to camera
         vec3d cameraRay = subVectors(triTransformed.p[0], camera);
 
         if (dotProduct(normal, cameraRay) < 0.0f)
@@ -137,30 +139,46 @@ void drawObj(sf::RenderWindow &w, sf::Time elapsed)
             triViewed.p[2] = mulMatrixByVector(matView, triTransformed.p[2]);
             triViewed.color = triTransformed.color;
 
-            // Project triangles from 3D -> 2D
-            triProjected.p[0] = mulMatrixByVector(projMatrix, triViewed.p[0]);
-            triProjected.p[1] = mulMatrixByVector(projMatrix, triViewed.p[1]);
-            triProjected.p[2] = mulMatrixByVector(projMatrix, triViewed.p[2]);
-            triProjected.color = triViewed.color;
+            // Clip Viewed Triangle against near plane, this could form two additional triangles.
+            triangle clipped[2];
+            int nClippedTriangles = clipAgainstPlane({ 0.0f, 0.0f, 0.1f }, { 0.0f, 0.0f, 1.0f }, triViewed, clipped[0], clipped[1]);
 
-            triProjected.p[0] = divVectors(triProjected.p[0], triProjected.p[0].w);
-            triProjected.p[1] = divVectors(triProjected.p[1], triProjected.p[1].w);
-            triProjected.p[2] = divVectors(triProjected.p[2], triProjected.p[2].w);
+            for (int n = 0; n < nClippedTriangles; n++)
+            {
+                // Project triangles from 3D -> 2D
+                triProjected.p[0] = mulMatrixByVector(projMatrix, clipped[n].p[0]);
+                triProjected.p[1] = mulMatrixByVector(projMatrix, clipped[n].p[1]);
+                triProjected.p[2] = mulMatrixByVector(projMatrix, clipped[n].p[2]);
+                triProjected.color = clipped[n].color;
 
-            // Scale into view
-            vec3d offsetView = { 1,1,0 };
-            triProjected.p[0] = addVectors(triProjected.p[0], offsetView);
-            triProjected.p[1] = addVectors(triProjected.p[1], offsetView);
-            triProjected.p[2] = addVectors(triProjected.p[2], offsetView);
-            triProjected.p[0].x *= 0.5f * (float)SCREEN_WIDTH;
-            triProjected.p[0].y *= 0.5f * (float)SCREEN_HEIGHT;
-            triProjected.p[1].x *= 0.5f * (float)SCREEN_WIDTH;
-            triProjected.p[1].y *= 0.5f * (float)SCREEN_HEIGHT;
-            triProjected.p[2].x *= 0.5f * (float)SCREEN_WIDTH;
-            triProjected.p[2].y *= 0.5f * (float)SCREEN_HEIGHT;
+                // Scale into view
+                triProjected.p[0] = divVector(triProjected.p[0], triProjected.p[0].w);
+                triProjected.p[1] = divVector(triProjected.p[1], triProjected.p[1].w);
+                triProjected.p[2] = divVector(triProjected.p[2], triProjected.p[2].w);
 
-            // Store triangle for sorting
-            vecTrianglesToRaster.push_back(triProjected);
+                // X/Y are inverted so put them back
+                triProjected.p[0].x *= -1.0f;
+                triProjected.p[1].x *= -1.0f;
+                triProjected.p[2].x *= -1.0f;
+                triProjected.p[0].y *= -1.0f;
+                triProjected.p[1].y *= -1.0f;
+                triProjected.p[2].y *= -1.0f;
+
+                // Offset verts into visible normalised space
+                vec3d offsetView = { 1,1,0 };
+                triProjected.p[0] = addVectors(triProjected.p[0], offsetView);
+                triProjected.p[1] = addVectors(triProjected.p[1], offsetView);
+                triProjected.p[2] = addVectors(triProjected.p[2], offsetView);
+                triProjected.p[0].x *= 0.5f * (float)SCREEN_WIDTH;
+                triProjected.p[0].y *= 0.5f * (float)SCREEN_HEIGHT;
+                triProjected.p[1].x *= 0.5f * (float)SCREEN_WIDTH;
+                triProjected.p[1].y *= 0.5f * (float)SCREEN_HEIGHT;
+                triProjected.p[2].x *= 0.5f * (float)SCREEN_WIDTH;
+                triProjected.p[2].y *= 0.5f * (float)SCREEN_HEIGHT;
+
+                // Store triangle for sorting
+                vecTrianglesToRaster.push_back(triProjected);
+            }
         }
     }
 
@@ -170,24 +188,77 @@ void drawObj(sf::RenderWindow &w, sf::Time elapsed)
         return z1 > z2;
     });
 
-    for (auto &triProjected : vecTrianglesToRaster)
+    // Loop through all transformed, viewed, projected, and sorted triangles
+    for (auto &triToRaster : vecTrianglesToRaster)
     {
-        // Rasterize triangle
-        drawTriangleFilled(
-            w,
-            triProjected.p[0].x, triProjected.p[0].y,
-            triProjected.p[1].x, triProjected.p[1].y,
-            triProjected.p[2].x, triProjected.p[2].y,
-            triProjected.color
-        );
+        // Clip triangles against all four screen edges, this could yield
+        // a bunch of triangles, so create a queue that we traverse to 
+        // ensure we only test new triangles generated against planes
+        triangle clipped[2];
+        std::list<triangle> listTriangles;
 
-        // drawTriangleLine(
-        //     w,
-        //     triProjected.p[0].x, triProjected.p[0].y,
-        //     triProjected.p[1].x, triProjected.p[1].y,
-        //     triProjected.p[2].x, triProjected.p[2].y,
-        //     sf::Color::Black
-        // );
+        // Add initial triangle
+        listTriangles.push_back(triToRaster);
+        int nNewTriangles = 1;
+
+        for (int p = 0; p < 4; p++)
+        {
+            int nTrisToAdd = 0;
+            while (nNewTriangles > 0)
+            {
+                // Take triangle from front of queue
+                triangle test = listTriangles.front();
+                listTriangles.pop_front();
+                nNewTriangles--;
+
+                // Clip it against a plane. We only need to test each 
+                // subsequent plane, against subsequent new triangles
+                // as all triangles after a plane clip are guaranteed
+                // to lie on the inside of the plane.
+                switch (p)
+                {
+                    case 0:
+                        nTrisToAdd = clipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, test, clipped[0], clipped[1]);
+                        break;
+                    case 1:
+                        nTrisToAdd = clipAgainstPlane({ 0.0f, (float)SCREEN_HEIGHT - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, test, clipped[0], clipped[1]);
+                        break;
+                    case 2:
+                        nTrisToAdd = clipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, test, clipped[0], clipped[1]);
+                        break;
+                    case 3:
+                        nTrisToAdd = clipAgainstPlane({ (float)SCREEN_WIDTH - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, test, clipped[0], clipped[1]);
+                        break;
+                }
+
+                // Clipping may yield a variable number of triangles, so
+                // add these new ones to the back of the queue for subsequent
+                // clipping against next planes
+                for (int w = 0; w < nTrisToAdd; w++)
+                    listTriangles.push_back(clipped[w]);
+            }
+            nNewTriangles = listTriangles.size();
+        }
+
+        // Draw the transformed, viewed, clipped, projected, sorted, clipped triangles
+        for (auto &t : listTriangles)
+        {
+            // Rasterize triangle
+            drawTriangleFilled(
+                w,
+                t.p[0].x, t.p[0].y,
+                t.p[1].x, t.p[1].y,
+                t.p[2].x, t.p[2].y,
+                t.color
+            );
+            // drawTriangleLine(
+            //     w,
+            //     t.p[0].x, t.p[0].y,
+            //     t.p[1].x, t.p[1].y,
+            //     t.p[2].x, t.p[2].y,
+            //     sf::Color::Black
+            // );
+        }
     }
 }
 
@@ -196,15 +267,15 @@ void handleMovement(sf::Time elapsed)
     float speed = 2.0f;
 
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
-        camera.y -= speed * elapsed.asSeconds();
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
         camera.y += speed * elapsed.asSeconds();
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
+        camera.y -= speed * elapsed.asSeconds();
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
-        camera.x -= speed * elapsed.asSeconds();
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
         camera.x += speed * elapsed.asSeconds();
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
+        camera.x -= speed * elapsed.asSeconds();
 
-    vec3d forward = mulVectors(lookDir, speed * elapsed.asSeconds());
+    vec3d forward = mulVector(lookDir, speed * elapsed.asSeconds());
 
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::W))
         camera = addVectors(camera, forward);

@@ -93,7 +93,7 @@ mat4x4 pointAt(vec3d &pos, vec3d &forw, vec3d &up)
     newForward = normVector(newForward);
 
     // Up direction
-    vec3d a = mulVectors(newForward, dotProduct(up, newForward));
+    vec3d a = mulVector(newForward, dotProduct(up, newForward));
     vec3d newUp = subVectors(up, a);
     newUp = normVector(newUp);
 
@@ -143,12 +143,12 @@ vec3d subVectors(vec3d &v1, vec3d &v2)
     return {v1.x - v2.x, v1.y - v2.y, v1.z - v2.z};
 }
 
-vec3d mulVectors(vec3d &v1, float k)
+vec3d mulVector(vec3d &v1, float k)
 {
     return {v1.x * k, v1.y * k, v1.z * k};
 }
 
-vec3d divVectors(vec3d &v1, float k)
+vec3d divVector(vec3d &v1, float k)
 {
     return {v1.x / k, v1.y / k, v1.z / k};
 }
@@ -176,4 +176,112 @@ vec3d crossProduct(vec3d &v1, vec3d &v2)
     v.y = v1.z*v2.x - v1.x*v2.z;
     v.z = v1.x*v2.y - v1.y*v2.x;
     return v;
+}
+
+vec3d intersectPlane(vec3d &planeP, vec3d &planeN, vec3d &lineStart, vec3d&lineEnd)
+{
+    planeN = normVector(planeN);
+    float planeD = -dotProduct(planeN, planeP);
+    float ad = dotProduct(lineStart, planeN);
+    float bd = dotProduct(lineEnd, planeN);
+    float t = (-planeD - ad) / (bd - ad);
+    vec3d lineStartToEnd = subVectors(lineEnd, lineStart);
+    vec3d lineToIntersect = mulVector(lineStartToEnd, t);
+    return addVectors(lineStart, lineToIntersect);
+}
+
+int clipAgainstPlane(vec3d planeP, vec3d planeN, triangle &inTri, triangle &outTri1, triangle &outTri2)
+{
+    planeN = normVector(planeN);
+
+    // Return signed shortest distance from point to plane, plane normal must be normalised
+    auto dist = [&](vec3d &p)
+    {
+        vec3d n = normVector(p);
+        return (planeN.x*p.x + planeN.y*p.y + planeN.z*p.z - dotProduct(planeN, planeP));
+    };
+
+    // Create two temporary storage arrays to classify points either side of plane
+	// If distance sign is positive, point lies on "inside" of plane
+    vec3d* insidePoints[3];
+    vec3d* outsidePoints[3];
+    int nInsidePointCount = 0, nOutsidePointCount = 0;
+
+    // Get signed distance of each point in triangle to plane
+    float d0 = dist(inTri.p[0]);
+	float d1 = dist(inTri.p[1]);
+	float d2 = dist(inTri.p[2]);
+
+    if (d0 >= 0) insidePoints[nInsidePointCount++] = &inTri.p[0];
+	else outsidePoints[nOutsidePointCount++] = &inTri.p[0];
+    if (d1 >= 0) insidePoints[nInsidePointCount++] = &inTri.p[1];
+	else outsidePoints[nOutsidePointCount++] = &inTri.p[1];
+    if (d2 >= 0) insidePoints[nInsidePointCount++] = &inTri.p[2];
+	else outsidePoints[nOutsidePointCount++] = &inTri.p[2];
+
+    // Classify triangle points, and break the input triangle into 
+    // smaller output triangles if required. There are four possible
+    // outcomes...
+    if (nInsidePointCount == 0)
+    {
+        // All points lie on the outside of plane, so clip whole triangle
+        // It ceases to exist
+        return 0; // No returned triangles are valid
+    }
+
+    if (nInsidePointCount == 3)
+    {
+        // All points lie on the inside of plane, so do nothing
+        // and allow the triangle to simply pass through
+        outTri1 = inTri;
+        return 1; // Just the one returned original triangle is valid
+    }
+
+    if (nInsidePointCount == 1 && nOutsidePointCount == 2)
+    {
+        // Triangle should be clipped. As two points lie outside
+        // the plane, the triangle simply becomes a smaller triangle
+
+        // Copy appearance info to new triangle
+        outTri1.color =  inTri.color;
+
+        // The inside point is valid, so keep that...
+        outTri1.p[0] = *insidePoints[0];
+
+        // but the two new points are at the locations where the 
+        // original sides of the triangle (lines) intersect with the plane
+        outTri1.p[1] = intersectPlane(planeP, planeN, *insidePoints[0], *outsidePoints[0]);
+        outTri1.p[2] = intersectPlane(planeP, planeN, *insidePoints[0], *outsidePoints[1]);
+
+        return 1; // Return the newly formed single triangle
+    }
+
+    if (nInsidePointCount == 2 && nOutsidePointCount == 1)
+    {
+        // Triangle should be clipped. As two points lie inside the plane,
+        // the clipped triangle becomes a "quad". Fortunately, we can
+        // represent a quad with two new triangles
+
+        // Copy appearance info to new triangles
+        outTri1.color =  inTri.color;
+        outTri2.color =  inTri.color;
+
+        // The first triangle consists of the two inside points and a new
+        // point determined by the location where one side of the triangle
+        // intersects with the plane
+        outTri1.p[0] = *insidePoints[0];
+        outTri1.p[1] = *insidePoints[1];
+        outTri1.p[2] = intersectPlane(planeP, planeN, *insidePoints[0], *outsidePoints[0]);
+
+        // The second triangle is composed of one of he inside points, a
+        // new point determined by the intersection of the other side of the 
+        // triangle and the plane, and the newly created point above
+        outTri2.p[0] = *insidePoints[1];
+        outTri2.p[1] = outTri1.p[2];
+        outTri2.p[2] = intersectPlane(planeP, planeN, *insidePoints[1], *outsidePoints[0]);
+
+        return 2; // Return two newly formed triangles which form a quad
+    }
+
+    return 0;
 }
