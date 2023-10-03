@@ -9,7 +9,8 @@ FetchContent_Declare(SFML
     GIT_TAG 2.6.x)
 FetchContent_MakeAvailable(SFML)
 
-add_executable(graph src/main.cpp)
+file(GLOB SOURCES "src/*.cpp" "src/include/*.hpp" "src/lib/*.cpp")
+add_executable(graph ${SOURCES})
 target_link_libraries(graph PRIVATE sfml-graphics)
 target_compile_features(graph PRIVATE cxx_std_17)
 

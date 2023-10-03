@@ -1,3 +1,4 @@
+```cpp
 #include <SFML/Graphics.hpp>
 #include <cmath>
 #include <vector>
@@ -277,3 +278,4 @@ int main()
         window.display();
     }
 }
+```
