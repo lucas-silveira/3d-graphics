@@ -48,7 +48,7 @@ void drawTriangleLine(
     w.draw(v3);
 }
 
-void drawTriangleFilled(
+void drawFilledTriangle(
         sf::RenderWindow &w,
         int x1, int y1,
         int x2, int y2,
@@ -57,16 +57,12 @@ void drawTriangleFilled(
     )
 {
     sf::ConvexShape triangle;
-    triangle.setPointCount(6);
+    triangle.setPointCount(4);
 
     triangle.setPoint(0, sf::Vector2f(x1, y1));
     triangle.setPoint(1, sf::Vector2f(x2, y2));
-
-    triangle.setPoint(2, sf::Vector2f(x2, y2));
-    triangle.setPoint(3, sf::Vector2f(x3, y3));
-
-    triangle.setPoint(4, sf::Vector2f(x3, y3));
-    triangle.setPoint(5, sf::Vector2f(x1, y1));
+    triangle.setPoint(2, sf::Vector2f(x3, y3));
+    triangle.setPoint(3, sf::Vector2f(x1, y1));
 
     triangle.setFillColor(color);
 
@@ -244,7 +240,7 @@ void drawObj(sf::RenderWindow &w, sf::Time elapsed)
         for (auto &t : listTriangles)
         {
             // Rasterize triangle
-            drawTriangleFilled(
+            drawFilledTriangle(
                 w,
                 t.p[0].x, t.p[0].y,
                 t.p[1].x, t.p[1].y,
