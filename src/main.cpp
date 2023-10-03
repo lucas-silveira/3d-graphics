@@ -7,11 +7,12 @@
 
 const unsigned int SCREEN_WIDTH = 920;
 const unsigned int SCREEN_HEIGHT = 640;
-float theta = 0.0f;
 
+float theta = 0.0f;
 mesh meshCube;
 mat4x4 projMatrix;
-vec3d camera;
+vec3d camera, lookDir;
+float yaw;
 
 void drawTriangleLine(
         sf::RenderWindow &w,
@@ -76,7 +77,7 @@ void drawObj(sf::RenderWindow &w, sf::Time elapsed)
 {
     // Set up rotation matrices
     mat4x4 matRotZ, matRotX;
-    theta += 1.0f * elapsed.asSeconds();
+    // theta += 1.0f * elapsed.asSeconds();
 
     matRotZ = makeRotatedMatrixZ(theta);
     matRotX = makeRotatedMatrixX(theta*0.5f);
@@ -88,11 +89,21 @@ void drawObj(sf::RenderWindow &w, sf::Time elapsed)
     matWorld = mulMatrices(matRotZ, matRotX);
     matWorld = mulMatrices(matWorld, matTrans);
 
+    vec3d up = { 0,1,0 };
+    vec3d forward = { 0,0,1 };
+    mat4x4 matRotCamera = makeRotatedMatrixY(yaw);
+    lookDir = mulMatrixByVector(matRotCamera, forward);
+    forward = addVectors(camera, lookDir);
+
+    mat4x4 matCamera = pointAt(camera, forward, up);
+    // Make view matrix from camera
+    mat4x4 matView = quickInverse(matCamera);
+
     std::vector<triangle> vecTrianglesToRaster;
 
     for (auto tri : meshCube.tris)
     {
-        triangle triProjected, triTransformed;
+        triangle triProjected, triTransformed, triViewed;
 
         triTransformed.p[0] = mulMatrixByVector(matWorld, tri.p[0]);
         triTransformed.p[1] = mulMatrixByVector(matWorld, tri.p[1]);
@@ -120,11 +131,17 @@ void drawObj(sf::RenderWindow &w, sf::Time elapsed)
                 static_cast<sf::Uint8>(255*dp)
             };
 
+            // Convert world space -> view space
+            triViewed.p[0] = mulMatrixByVector(matView, triTransformed.p[0]);
+            triViewed.p[1] = mulMatrixByVector(matView, triTransformed.p[1]);
+            triViewed.p[2] = mulMatrixByVector(matView, triTransformed.p[2]);
+            triViewed.color = triTransformed.color;
+
             // Project triangles from 3D -> 2D
-            triProjected.p[0] = mulMatrixByVector(projMatrix, triTransformed.p[0]);
-            triProjected.p[1] = mulMatrixByVector(projMatrix, triTransformed.p[1]);
-            triProjected.p[2] = mulMatrixByVector(projMatrix, triTransformed.p[2]);
-            triProjected.color = triTransformed.color;
+            triProjected.p[0] = mulMatrixByVector(projMatrix, triViewed.p[0]);
+            triProjected.p[1] = mulMatrixByVector(projMatrix, triViewed.p[1]);
+            triProjected.p[2] = mulMatrixByVector(projMatrix, triViewed.p[2]);
+            triProjected.color = triViewed.color;
 
             triProjected.p[0] = divVectors(triProjected.p[0], triProjected.p[0].w);
             triProjected.p[1] = divVectors(triProjected.p[1], triProjected.p[1].w);
@@ -174,6 +191,31 @@ void drawObj(sf::RenderWindow &w, sf::Time elapsed)
     }
 }
 
+void handleMovement(sf::Time elapsed)
+{
+    float speed = 2.0f;
+
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
+        camera.y -= speed * elapsed.asSeconds();
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
+        camera.y += speed * elapsed.asSeconds();
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
+        camera.x -= speed * elapsed.asSeconds();
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
+        camera.x += speed * elapsed.asSeconds();
+
+    vec3d forward = mulVectors(lookDir, speed * elapsed.asSeconds());
+
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::W))
+        camera = addVectors(camera, forward);
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::S))
+        camera = subVectors(camera, forward);
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::A))
+        yaw -= speed * elapsed.asSeconds();
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::D))
+        yaw += speed * elapsed.asSeconds();
+}
+
 void init()
 {
     meshCube.loadFromObjFile("assets/monkey.obj");
@@ -203,6 +245,8 @@ int main()
         }
 
         sf::Time elapsed = clock.restart();
+        handleMovement(elapsed);
+
         window.clear();
         drawObj(window, elapsed);
         window.display();

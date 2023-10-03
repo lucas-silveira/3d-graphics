@@ -70,6 +70,8 @@ mat4x4 makeRotatedMatrixZ(float angleRad);
 mat4x4 makeTranslatedMatrix(float x, float y, float z);
 mat4x4 makeProjectionMatrix(float fovDegrees, float aspectRatio, float near, float far);
 mat4x4 mulMatrices(mat4x4 &m1, mat4x4 &m2);
+mat4x4 pointAt(vec3d &pos, vec3d &forw, vec3d &up);
+mat4x4 quickInverse(mat4x4 &m);
 vec3d mulMatrixByVector(mat4x4 &m, vec3d &i);
 vec3d addVectors(vec3d &v1, vec3d &v2);
 vec3d subVectors(vec3d &v1, vec3d &v2);
