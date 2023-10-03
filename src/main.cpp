@@ -289,7 +289,7 @@ void handleMovement(sf::Time elapsed)
 
 void init()
 {
-    meshCube.loadFromObjFile("assets/monkey.obj");
+    meshCube.loadFromObjFile("assets/mountains.obj");
     projMatrix = makeProjectionMatrix(
         90.0f,
         (float)SCREEN_HEIGHT/(float)SCREEN_WIDTH,
