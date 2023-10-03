@@ -105,6 +105,7 @@ void drawTriangleFilled(
 
 void drawCube(sf::RenderWindow &w, sf::Time elapsed)
 {
+    // Set up rotation matrices
     mat4x4 matRotZ, matRotX;
     theta += 1.0f * elapsed.asSeconds();
 
@@ -144,6 +145,7 @@ void drawCube(sf::RenderWindow &w, sf::Time elapsed)
         triTranslated.p[1].z = triRotatedZX.p[1].z + 3.0f;
         triTranslated.p[2].z = triRotatedZX.p[2].z + 3.0f;
 
+        // Use cross-product to get surface normal
         vec3d normal, line1, line2;
         line1.x = triTranslated.p[1].x - triTranslated.p[0].x;
         line1.y = triTranslated.p[1].y - triTranslated.p[0].y;
